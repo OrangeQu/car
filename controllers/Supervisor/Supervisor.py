@@ -15,7 +15,7 @@ import math
 
 # ==================== 配置区域 ====================
 # DeepSeek API 配置（请替换为你的 API Key）
-DEEPSEEK_API_KEY = "sk-37a5c467e6104e30a376292db0aa87ca"  # ⚠️ 请替换为你的 API Key
+DEEPSEEK_API_KEY = "sk-4dde16c2236340cd8eb5aed6f83c0091"  # ⚠️ 请替换为你的 API Key
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 # 场地参数

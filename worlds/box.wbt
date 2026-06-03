@@ -3,7 +3,17 @@
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Youbot.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/BodyMesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Arm0Mesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Arm1Mesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Arm2Mesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Arm3Mesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Arm4Mesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/Arm5Mesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/FingerMesh.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/InteriorWheel.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/ExteriorWheel.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/kuka/youbot/protos/PlateMesh.proto"
 
 WorldInfo {
   info [
@@ -38,8 +48,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation -0.11914228376619637 0.12651679352440628 0.9847835382332901 1.5261117676826368
-  position -1.7669479131913466 -4.450675013128953 2.215904199828182
+  orientation -0.10526127605319813 0.10305035483159383 0.9890908391713752 1.6030145822945292
+  position -3.22038957731453 -0.720538558119034 1.4860073550113244
   follow "youBot"
 }
 TexturedBackground {
@@ -178,7 +188,7 @@ Solid {
     mass 50
   }
 }
-Solid {
+DEF red_block Solid {
   translation -4 4 0.05
   children [
     Shape {
@@ -203,7 +213,7 @@ Solid {
     1 0 0
   ]
 }
-Solid {
+DEF blue_block Solid {
   translation 4 4 0.05
   children [
     Shape {
@@ -228,7 +238,7 @@ Solid {
     0 0 1
   ]
 }
-Solid {
+DEF green_block Solid {
   translation 4 -4 0.05
   children [
     Shape {
@@ -253,7 +263,7 @@ Solid {
     0 1 0
   ]
 }
-Solid {
+DEF yellow_block Solid {
   translation -4 -4 0.05
   children [
     Shape {
@@ -278,9 +288,503 @@ Solid {
     1 1 0
   ]
 }
-DEF youBot Youbot {
-  translation -2.15 1.9 0.102838
-  controller "YouBot"
+DEF youBot Robot {
+  translation -3.46 3.09 0.102838
+  rotation 0 0 1 0
+  customData ""
   supervisor TRUE
+  synchronization TRUE
   name "youBot"
+  model "KUKA youBot"
+  children [
+    BodyMesh {
+    }
+    Group {
+      children [
+        Camera {
+          translation 0.25 0 0.08
+          rotation 0 0 1 0
+          name "CameraTop"
+          fieldOfView 1.064
+          width 160
+          height 120
+          near 0.002
+          recognition Recognition {
+            maxRange 5.0
+            maxObjects 10
+          }
+        }
+      ]
+    }
+    DEF ARM Solid {
+      translation 0.156 0 0
+      children [
+        Arm0Mesh {
+        }
+        HingeJoint {
+          jointParameters HingeJointParameters {
+            axis 0 0 1
+            anchor 0 0 0.077
+          }
+          device [
+            RotationalMotor {
+              name "arm1"
+              maxVelocity 1.5708
+              minPosition -2.9496
+              maxPosition 2.9496
+              maxTorque 9.5
+            }
+            PositionSensor {
+              name "arm1sensor"
+            }
+          ]
+          endPoint Solid {
+            translation 0 0 0.077
+            rotation 0 0 1 0
+            children [
+              Arm1Mesh {
+              }
+              HingeJoint {
+                jointParameters HingeJointParameters {
+                  axis 0 -1 0
+                  anchor 0.033 0 0.07
+                }
+                device [
+                  RotationalMotor {
+                    name "arm2"
+                    maxVelocity 1.5708
+                    minPosition -1.13446
+                    maxPosition 1.5708
+                    maxTorque 9.5
+                  }
+                  PositionSensor {
+                    name "arm2sensor"
+                  }
+                ]
+                endPoint Solid {
+                  translation 0.033 0 0.07
+                  rotation 0 -1 0 0
+                  children [
+                    Arm2Mesh {
+                    }
+                    HingeJoint {
+                      jointParameters HingeJointParameters {
+                        axis 0 -1 0
+                        anchor 0 0 0.155
+                      }
+                      device [
+                        RotationalMotor {
+                          name "arm3"
+                          maxVelocity 1.5708
+                          minPosition -2.63545
+                          maxPosition 2.54818
+                          maxTorque 6
+                        }
+                        PositionSensor {
+                          name "arm3sensor"
+                        }
+                      ]
+                      endPoint Solid {
+                        translation 0 0 0.155
+                        rotation 0 -1 0 0
+                        children [
+                          Arm3Mesh {
+                          }
+                          HingeJoint {
+                            jointParameters HingeJointParameters {
+                              axis 0 -1 0
+                              anchor 0 0 0.135
+                            }
+                            device [
+                              RotationalMotor {
+                                name "arm4"
+                                maxVelocity 1.5708
+                                minPosition -1.78024
+                                maxPosition 1.78024
+                                maxTorque 2
+                              }
+                              PositionSensor {
+                                name "arm4sensor"
+                              }
+                            ]
+                            endPoint Solid {
+                              translation 0 0 0.135
+                              rotation 0 -1 0 0
+                              children [
+                                Arm4Mesh {
+                                }
+                                HingeJoint {
+                                  jointParameters HingeJointParameters {
+                                    axis 0 0 1
+                                    anchor 0 0 0.081
+                                  }
+                                  device [
+                                    RotationalMotor {
+                                      name "arm5"
+                                      maxVelocity 1.5708
+                                      minPosition -2.92343
+                                      maxPosition 2.92343
+                                      maxTorque 1
+                                    }
+                                    PositionSensor {
+                                      name "arm5sensor"
+                                    }
+                                  ]
+                                  endPoint Solid {
+                                    translation 0 0 0.081
+                                    rotation 0 0 1 0
+                                    children [
+                                      Arm5Mesh {
+                                      }
+                                      SliderJoint {
+                                        jointParameters JointParameters {
+                                          axis 0 1 0
+                                        }
+                                        device [
+                                          LinearMotor {
+                                            name "finger::left"
+                                            maxPosition 0.06
+                                            maxForce 100
+                                          }
+                                          PositionSensor {
+                                            name "finger::leftsensor"
+                                          }
+                                        ]
+                                        endPoint Solid {
+                                          translation 0 0 0.09
+                                          rotation 1 0 0 4.71239
+                                          children [
+                                            FingerMesh {
+                                            }
+                                          ]
+                                          name "finger::left"
+                                          boundingObject DEF FINGER_BO Group {
+                                            children [
+                                              Pose {
+                                                translation 0 -0.031 0.015
+                                                children [
+                                                  Box {
+                                                    size 0.014 0.032 0.009
+                                                  }
+                                                ]
+                                              }
+                                              Pose {
+                                                translation 0 -0.007 0.01
+                                                children [
+                                                  Box {
+                                                    size 0.014 0.015 0.019
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                          physics DEF FINGER_PH Physics {
+                                            density -1
+                                            mass 0.03
+                                            centerOfMass [
+                                              0 -0.02 0.01
+                                            ]
+                                            inertiaMatrix [
+                                              6.84034e-06 1.41763e-06 6.40271e-06
+                                              0 0 8.29319e-07
+                                            ]
+                                          }
+                                        }
+                                      }
+                                      SliderJoint {
+                                        jointParameters JointParameters {
+                                          axis 0 -1 0
+                                        }
+                                        device [
+                                          LinearMotor {
+                                            name "finger::right"
+                                            maxPosition 0.06
+                                            maxForce 100
+                                          }
+                                          PositionSensor {
+                                            name "finger::rightsensor"
+                                          }
+                                        ]
+                                        endPoint Solid {
+                                          translation 0 0 0.09
+                                          rotation 0 -0.707107 0.707107 3.14159
+                                          children [
+                                            FingerMesh {
+                                            }
+                                          ]
+                                          name "finger::right"
+                                          boundingObject USE FINGER_BO
+                                          physics USE FINGER_PH
+                                        }
+                                      }
+                                    ]
+                                    boundingObject Group {
+                                      children [
+                                        Pose {
+                                          translation 0 0 0.056
+                                          children [
+                                            Box {
+                                              size 0.05 0.095 0.05
+                                            }
+                                          ]
+                                        }
+                                        Pose {
+                                          translation 0 -0.024 0.003
+                                          rotation 1 0 0 -1.5708
+                                          children [
+                                            Cylinder {
+                                              height 0.047
+                                              radius 0.027
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                    physics Physics {
+                                      density -1
+                                      mass 0.877
+                                      centerOfMass [
+                                        0 0 0.026
+                                      ]
+                                      inertiaMatrix [
+                                        0.00152517 0.00103897 0.000837339
+                                        0 0 -0.00015098
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                              boundingObject Pose {
+                                translation 0 0.0225 0.065
+                                children [
+                                  Box {
+                                    size 0.06 0.045 0.19
+                                  }
+                                ]
+                              }
+                              physics Physics {
+                                density -1
+                                mass 0.934
+                                centerOfMass [
+                                  0 0.0225 0.065
+                                ]
+                                inertiaMatrix [
+                                  0.0029674 0.00308998 0.000437812
+                                  0 0 -5.99276e-20
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                        boundingObject Pose {
+                          translation 0 -0.03 0.078
+                          children [
+                            Box {
+                              size 0.07 0.06 0.21
+                            }
+                          ]
+                        }
+                        physics Physics {
+                          density -1
+                          mass 1.155
+                          centerOfMass [
+                            0 -0.03 0.078
+                          ]
+                          inertiaMatrix [
+                            0.00459113 0.00471625 0.000818125
+                            0 0 1.56701e-20
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                  boundingObject Pose {
+                    translation 0.032 0.023 0.07
+                    rotation 1 0 0 -1.5708
+                    children [
+                      Cylinder {
+                        height 0.046
+                        radius 0.036
+                      }
+                    ]
+                  }
+                  physics Physics {
+                    density -1
+                    mass 2.412
+                    centerOfMass [
+                      0.015 0.01 0.05
+                    ]
+                    inertiaMatrix [
+                      0.00257923 0.00322484 0.0023115
+                      -0.000533052 -0.00082008 -0.00062712
+                    ]
+                  }
+                }
+              }
+            ]
+            boundingObject Pose {
+              translation 0 0 0.04
+              children [
+                Cylinder {
+                  height 0.08
+                  radius 0.078
+                }
+              ]
+            }
+            physics Physics {
+              density -1
+              mass 0.845
+              centerOfMass [
+                0 0 0.04
+              ]
+              inertiaMatrix [
+                0.00173591 0.00173591 0.00257049
+                0 0 -3.06558e-09
+              ]
+            }
+          }
+        }
+      ]
+      name "front arm"
+      boundingObject Pose {
+        translation 0 0 0.04
+        children [
+          Cylinder {
+            height 0.08
+            radius 0.078
+          }
+        ]
+      }
+      physics Physics {
+        density -1
+        mass 0.845
+        centerOfMass [
+          0 0 0.04
+        ]
+        inertiaMatrix [
+          0.00173591 0.00173591 0.00257049
+          0 0 -3.06558e-09
+        ]
+      }
+    }
+    DEF WHEEL1 InteriorWheel {
+      translation 0.228 -0.158 -0.055
+      anchor 0.228 -0.158 -0.055
+      name "wheel1"
+      sensorName "wheel1sensor"
+    }
+    DEF WHEEL2 ExteriorWheel {
+      translation 0.228 0.158 -0.055
+      anchor 0.228 0.158 -0.055
+      name "wheel2"
+      sensorName "wheel2sensor"
+    }
+    DEF WHEEL3 ExteriorWheel {
+      translation -0.228 -0.158 -0.055
+      anchor -0.228 -0.158 -0.055
+      name "wheel3"
+      sensorName "wheel3sensor"
+    }
+    DEF WHEEL4 InteriorWheel {
+      translation -0.228 0.158 -0.055
+      anchor -0.228 0.158 -0.055
+      name "wheel4"
+      sensorName "wheel4sensor"
+    }
+    DEF PLATE Solid {
+      translation -0.155 0 0
+      children [
+        PlateMesh {
+        }
+      ]
+      name "plate"
+      boundingObject Group {
+        children [
+          Pose {
+            translation 0.008 0 0.045
+            children [
+              Box {
+                size 0.25 0.17 0.007
+              }
+            ]
+          }
+          Pose {
+            translation -0.015 0.112 0.045
+            rotation 0 0 1 -0.13
+            children [
+              Box {
+                size 0.17 0.08 0.007
+              }
+            ]
+          }
+          Pose {
+            translation -0.015 -0.112 0.045
+            rotation 0 0 1 0.13
+            children [
+              Box {
+                size 0.17 0.08 0.007
+              }
+            ]
+          }
+          Pose {
+            translation 0.076 0.084 0.045
+            rotation 0 0 1 0.81
+            children [
+              Box {
+                size 0.08 0.08 0.007
+              }
+            ]
+          }
+          Pose {
+            translation 0.076 -0.084 0.045
+            rotation 0 0 1 -0.81
+            children [
+              Box {
+                size 0.08 0.08 0.007
+              }
+            ]
+          }
+        ]
+      }
+      physics Physics {
+        density -1
+        mass 0.5
+      }
+    }
+  ]
+  description "KUKA youBot"
+  boundingObject Group {
+    children [
+      Pose {
+        translation 0 0 -0.045
+        children [
+          Box {
+            size 0.34 0.34 0.09
+          }
+        ]
+      }
+      Pose {
+        translation 0 0 -0.045
+        children [
+          Box {
+            size 0.56 0.23 0.09
+          }
+        ]
+      }
+    ]
+  }
+  physics Physics {
+    density -1
+    mass 22
+    centerOfMass [
+      0 0 -0.045
+    ]
+    inertiaMatrix [
+      0.166204 0.418086 0.55459
+      0 0 0
+    ]
+  }
+  controller "YouBot"
+  controllerArgs []
+  window "<generic>"
 }
