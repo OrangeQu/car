@@ -242,10 +242,6 @@ class FSM:
         dy = block_pos[1] - robot_pos[1]
         dist = math.sqrt(dx**2 + dy**2)
 
-        # 调试输出（每0.5秒一次）
-        if int(self.robot.getTime() * 2) % 10 == 0:
-            print(f"  📍 位置: ({robot_pos[0]:.2f}, {robot_pos[1]:.2f}), 目标: {block_pos}, 距离: {dist:.2f}m")
-
         # 如果足够接近，进入接近阶段
         approach_dist = NAVIGATION["approach_distance"]
         if dist < approach_dist:
@@ -354,9 +350,6 @@ class FSM:
         dy = block_pos[1] - robot_pos[1]
         dist = math.sqrt(dx**2 + dy**2)
 
-        if int(self.robot.getTime() * 2) % 10 == 0:
-            print(f"  🎯 接近中: 距离木块 {dist:.3f}m")
-
         grasp_dist = NAVIGATION["grasp_distance"]
 
         if dist <= grasp_dist:
@@ -443,19 +436,11 @@ class FSM:
         # 阶段3: 距离足够近，停止底盘
         self.drive.stop()
 
-        # ===== 调试输出 =====
-        print(f"\n  🔍 抓取调试信息:")
-        print(f"     机器人位置: ({robot_pos[0]:.3f}, {robot_pos[1]:.3f})")
-        print(f"     机器人朝向: {robot_angle:.3f} rad")
-        print(f"     木块位置: {block_pos}")
-        print(f"     世界坐标差: dx={dx:.3f}, dy={dy:.3f}, 距离={dist:.3f}")
-
         # 计算木块在机器人坐标系下的位置
         cos_a = math.cos(robot_angle)
         sin_a = math.sin(robot_angle)
         rel_x = dx * cos_a + dy * sin_a      # 前方为正
         rel_y = -dx * sin_a + dy * cos_a     # 左侧为正
-        print(f"     相对位置: rel_x={rel_x:.3f}, rel_y={rel_y:.3f}")
 
         # 使用摄像头获取木块精确高度和偏移
         block_z = 0.05  # 默认地面高度
@@ -468,29 +453,16 @@ class FSM:
             if obj_color:
                 obj_pos = obj.get('position', [0, 0, 0])
                 if len(obj_pos) >= 3:
-                    # 摄像头返回的 position[2] 是木块在基座坐标系下的 z 坐标
                     camera_z = obj_pos[2]
-                    print(f"     摄像头检测到木块高度: z={camera_z:.3f}m")
-                    # 如果摄像头检测到的高度合理（0~0.2m 地面，或 0.6~0.9m 桌面）
                     if 0.0 < camera_z < 1.0:
                         block_z = camera_z
-                    
-                    # 摄像头返回的 position[0] 是木块在基座坐标系下的 x 坐标（前后）
-                    # position[1] 是木块在基座坐标系下的 y 坐标（左右）
                     camera_x = obj_pos[0]
                     camera_y = obj_pos[1]
-                    print(f"     摄像头检测到木块位置: x={camera_x:.3f}m, y={camera_y:.3f}m")
-                    
-                    # 如果摄像头检测到木块在侧面（y != 0），说明木块被碰偏了
                     if abs(camera_y) > 0.01:
                         offset_y = camera_y
-                        print(f"     检测到木块偏移: offset_y={offset_y:.3f}m")
                     break
 
-        print(f"     使用木块高度: z={block_z:.3f}m")
-
         # 阶段4: 先后退一点，避免底盘碰到木块
-        print(f"  🦾 后退一点避免碰撞木块...")
         self.drive.move(-0.03, 0.0, 0.0)  # 后退 3cm
         self.robot.step(32 * 20)
         self.drive.stop()
@@ -503,10 +475,8 @@ class FSM:
         sin_a = math.sin(robot_angle)
         rel_x = dx * cos_a + dy * sin_a
         rel_y = -dx * sin_a + dy * cos_a
-        print(f"     后退后相对位置: rel_x={rel_x:.3f}m, rel_y={rel_y:.3f}m")
 
         # 使用预设姿态抓取（带逐步下探 + 偏移补偿）
-        print(f"  🦾 木块在机器人前方 {rel_x:.2f}m 处，使用预设姿态抓取（带逐步下探）")
         self.arm.grasp_block(rel_x, rel_y, block_z, gripper=self.gripper, offset_y=offset_y)
 
         # grasp_block 内部已经完成了夹爪闭合和检测
@@ -523,17 +493,13 @@ class FSM:
             else:
                 print(f"  ⚠️ 抓取可能失败，尝试重试...")
                 
-                # 张开夹爪
+                # 张开夹爪，再往前靠近一点重试
                 self.gripper.open()
                 self.robot.step(32 * 30)
-                
-                # 再往前靠近一点
                 self.drive.move(0.03, 0.0, 0.0)
                 self.robot.step(32 * 30)
                 self.drive.stop()
                 
-                # 重新尝试抓取
-                print(f"  🦾 重试: 使用低姿态抓取")
                 self.arm.set_pose("grasp_low")
                 self.robot.step(32 * 60)
                 self.gripper.close()
@@ -554,54 +520,90 @@ class FSM:
         self._transition_to("NAVIGATE_TO_TABLE")
 
     def _state_NAVIGATE_TO_TABLE(self):
-        """导航到桌子"""
+        """
+        导航到桌子（使用固定安全目标点，避开桌腿）
+        
+        桌子在 (0,0)，桌面尺寸 1.2m x 0.8m
+        桌腿位置：4条圆柱腿在 (±0.55, ±0.35)，半径 0.04m
+        
+        策略：不使用动态目标点（避免目标点落在桌腿附近），
+        而是根据机器人当前位置，选择桌子四个方向上的固定安全点之一。
+        """
         table_pos = self.table_position
-
         approach_dist = NAVIGATION["table_approach_distance"]
         robot_pos = self.drive.get_position()
+        
+        # 计算到桌子的距离
         dx = table_pos[0] - robot_pos[0]
         dy = table_pos[1] - robot_pos[1]
         dist = math.sqrt(dx**2 + dy**2)
-
+        
+        # 检查是否已经到达
         if dist < approach_dist:
+            print(f"  ✅ 已到达桌子附近 (距离={dist:.2f}m)")
+            self.drive.stop()
             self._transition_to("PLACE_ON_TABLE")
             return
-
-        # 计算目标点
-        if dist > 0.01:
-            target_x = table_pos[0] - (dx / dist) * approach_dist
-            target_y = table_pos[1] - (dy / dist) * approach_dist
+        
+        # 定义4个固定安全目标点（桌子四条边的外侧，避开桌腿区域）
+        # 桌子尺寸 1.2m x 0.8m，桌腿在 (±0.55, ±0.35)
+        # 机械臂竖直向上时，arm4 向后弯曲（负方向），夹爪朝南（y负方向）伸约 0.17m
+        # 小车在 (0, 0.6) 面向南（朝桌子中心），arm4 负方向弯曲使夹爪朝南伸向桌子中心
+        # 安全点选在桌子边缘外侧 0.2m 处（北/南：y=0.6，东/西：x=0.8）
+        # 这样 arm4=-1.670 时夹爪在机器人前方 0.17m（朝南），正好在桌面范围内
+        # 北/南方向：桌子 y 范围 [-0.4, 0.4]，安全点 y=0.6（距边缘 0.2m 外侧）
+        # 东/西方向：桌子 x 范围 [-0.6, 0.6]，安全点 x=0.8（距边缘 0.2m 外侧）
+        # 优先选择前方（北），因为机械臂向前伸展
+        safe_points = [
+            (0.0, 0.6),    # 北（y正方向）- 桌子前方（优先）
+            (0.0, -0.6),   # 南（y负方向）- 桌子后方
+            (-0.8, 0.0),   # 西（x负方向）- 桌子左方
+            (0.8, 0.0),    # 东（x正方向）- 桌子右方
+        ]
+        
+        # 优先选择前方（北），如果前方太远则选择最近的安全点
+        front_point = safe_points[0]  # (0.0, 0.6)
+        front_dist = math.sqrt((front_point[0] - robot_pos[0])**2 + (front_point[1] - robot_pos[1])**2)
+        
+        # 如果前方距离 < 8m（场地半对角线），优先选择前方
+        # 否则选择最近的安全点
+        if front_dist < 8.0:
+            best_point = front_point
         else:
-            target_x = table_pos[0]
-            target_y = table_pos[1]
-
-        target_angle = math.atan2(dy, dx)
-
+            best_point = None
+            best_dist = float('inf')
+            for px, py in safe_points:
+                d = math.sqrt((px - robot_pos[0])**2 + (py - robot_pos[1])**2)
+                if d < best_dist:
+                    best_dist = d
+                    best_point = (px, py)
+        
+        target_x, target_y = best_point
+        
+        # 目标朝向：面向桌子中心
+        target_angle = math.atan2(table_pos[1] - target_y, table_pos[0] - target_x)
+        
         if not self.drive.is_navigation_active():
+            print(f"  🚗 导航到桌子: 目标 ({target_x:.2f}, {target_y:.2f}), 朝向 {target_angle:.2f}rad")
             self.drive.start_navigation(target_x, target_y, target_angle)
-
+        
         reached = self.drive.run_navigation()
-
+        
         if reached:
+            self.drive.stop()
             self._transition_to("PLACE_ON_TABLE")
-
+        
         if self._is_timeout(60.0):
             print(f"  ⚠️ 导航到桌子超时")
             self._transition_to("ERROR")
 
     def _state_PLACE_ON_TABLE(self):
-        """放置木块到桌面"""
-        self.arm.place_on_table()
-        self.robot.step(32 * 30)
+        """平稳放置木块到桌面（包含释放）"""
+        # 使用新的多步骤平稳放置方法
+        # place_on_table 内部已经包含了：接近 → 缓慢下降 → 释放 → 抬升
+        self.arm.place_on_table(gripper=self.gripper)
 
-        self._transition_to("RELEASE")
-
-    def _state_RELEASE(self):
-        """释放木块"""
-        self.gripper.open()
-        self.robot.step(32 * 20)
-
-        print(f"  🖐 已放置 {COLOR_NAMES.get(self.current_color, self.current_color)} 木块到桌面")
+        print(f"  ✅ 已平稳放置 {COLOR_NAMES.get(self.current_color, self.current_color)} 木块到桌面")
         self._transition_to("BACK_OFF")
 
     def _state_BACK_OFF(self):

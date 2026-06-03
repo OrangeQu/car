@@ -28,7 +28,30 @@ GRIPPER_MIN = 0.0       # 夹紧位置 [m]
 GRIPPER_MAX = 0.06      # 张开位置 [m]（原为0.025，改为0.06以夹住10cm木块）
 GRIPPER_SPEED = 0.05    # 夹爪速度 [m/s]
 
+# ==================== 桌面参数 ====================
+# 桌子 Solid translation: 0 0 0.325
+# 桌面 Box size: 1.2 0.8 0.05 -> 表面在 0.325 + 0.05/2 = 0.350m
+TABLE_HEIGHT = 0.350      # 桌面表面高度 [m]（可微调）
+TABLE_CENTER = (0.0, 0.0) # 桌子中心位置 (x, y)
+TABLE_SURFACE_Z = 0.350   # 桌面表面 Z 坐标 [m]（木块放置目标高度）
+
+# 放置参数
+PLACEMENT = {
+    "approach_height": 0.55,      # 放置前夹爪高度 [m]（高于桌面，仅用于参考）
+    "drop_step": 0.01,            # 每次下降步长 [m]（仅用于参考）
+    "drop_delay_steps": 15,       # 每步下降后的等待步数（仅用于参考）
+    "release_height_offset": 0.005, # 释放前再下降一点确保接触 [m]（仅用于参考）
+    "retract_height": 0.50,       # 释放后抬升高度 [m]（仅用于参考）
+    "max_force_during_place": 2.0, # 放置时夹爪最大力 [N]
+    # 以下为实际使用的参数（基于正运动学精确计算）
+    "arm4_approach": 1.3,         # 接近时 arm4 角度 [rad] → 绝对高=0.417m
+    "arm4_release": 1.4,          # 释放时 arm4 角度 [rad] → 绝对高=0.400m
+    "arm4_step": 0.01,            # arm4 下降步长 [rad]
+    "arm4_step_delay": 10,        # 每步等待步数
+}
+
 # ==================== 导航参数 ====================
+
 # 注意: 机械臂基座在机器人前方 0.156m 处
 # 机械臂总伸展长度约 0.46m（arm2+arm3+arm4+arm5）
 # 地面抓取时，机械臂几乎垂直向下，水平伸展仅约 0.02m
@@ -36,7 +59,7 @@ GRIPPER_SPEED = 0.05    # 夹爪速度 [m/s]
 NAVIGATION = {
     "approach_distance": 0.30,      # 接近木块的目标距离 [m]（从远处导航到此距离）
     "grasp_distance": 0.05,         # 抓取距离 [m]（底盘需要靠近到木块前方 0.05m）
-    "table_approach_distance": 0.4, # 接近桌子的距离 [m]
+    "table_approach_distance": 0.66, # 接近桌子的距离 [m]（安全点距离桌子中心0.6m，到达时距离<0.65m即认为已到达）
     "position_tolerance": 0.03,     # 位置容差 [m]
     "angle_tolerance": 0.05,        # 角度容差 [rad]
     "obstacle_distance": 0.3,       # 障碍物检测距离 [m]
