@@ -201,8 +201,14 @@ class FSM:
             while angle_diff < -math.pi:
                 angle_diff += 2 * math.pi
 
+            # 使用配置参数中的 Lidar 停车距离
+            lidar_stop_dist = NAVIGATION["lidar_precision_stop"]
+            
             # 如果 Lidar 检测到木块很近，停止并进入抓取
-            if lidar_front_dist < 0.18 or dist < 0.12:
+            # 注意：Lidar 装在机器人前方 0.25m 处
+            # 当 Lidar 检测到 0.12m 时，车头离木块还有约 0.25-0.12=0.13m
+            # 这样车头不会碰撞木块
+            if lidar_front_dist < lidar_stop_dist or dist < 0.10:
                 print(f"  ✅ 已到达木块前方 (距离={dist:.2f}m, Lidar={lidar_front_dist:.2f}m)")
                 self.drive.stop()
                 self._transition_to("APPROACH_BLOCK")
@@ -224,6 +230,7 @@ class FSM:
                 omega = 0.3 * angle_diff
                 self.drive.move(vx_robot, vy_robot, omega)
 
+
         # 超时检查
         if self._is_timeout(60.0):
             print(f"  ⚠️ 导航到木块超时")
@@ -231,33 +238,121 @@ class FSM:
 
     def _state_APPROACH_BLOCK(self):
         """
-        最后一步靠近木块 + 抓取
+        最后一步靠近木块 + 抓取（增强版）
         
-        小车已经停在木块前方约 0.15m 处
-        用机械臂正面抓取木块
+        改进：
+        1. 停车后先用 Lidar 精确扫描木块位置
+        2. 如果木块偏移，用底盘微调
+        3. 用 Camera + Lidar 融合定位确认
+        4. 用精确坐标调用机械臂抓取
         """
         if self.current_color is None:
             self._transition_to("ERROR")
             return
 
-        block_pos = self._get_block_position(self.current_color)
-        robot_pos = self.drive.get_position()
-        robot_angle = self.drive.get_orientation()
+        print(f"\n  🎯 ===== 开始抓取 {COLOR_NAMES.get(self.current_color, self.current_color)} 木块 =====")
 
-        # 计算木块在机器人坐标系下的位置
-        dx = block_pos[0] - robot_pos[0]
-        dy = block_pos[1] - robot_pos[1]
-        cos_a = math.cos(robot_angle)
-        sin_a = math.sin(robot_angle)
-        rel_x = dx * cos_a + dy * sin_a      # 前方为正
-        rel_y = -dx * sin_a + dy * cos_a     # 左侧为正
+        # ===== 步骤1: 用 Lidar 精确扫描木块位置 =====
+        lidar_pos = None
+        if self.perception.lidar and self.perception.lidar.enabled:
+            print(f"  📡 用 Lidar 扫描木块精确位置...")
+            lidar_pos = self.perception.lidar.locate_block_exact()
+            if lidar_pos:
+                forward, left = lidar_pos
+                print(f"  📡 Lidar 检测到木块: 前={forward:.3f}m, 左={left:.3f}m")
+            else:
+                print(f"  ⚠️ Lidar 未检测到木块，使用 Supervisor 坐标")
 
-        print(f"  🎯 木块相对位置: 前={rel_x:.3f}m, 左={rel_y:.3f}m")
+        # ===== 步骤2: 用 Camera 识别确认 =====
+        camera_pos = None
+        camera_objects = self.perception.detect_blocks_by_color()
+        for color, x, y, z in camera_objects:
+            if color == self.current_color:
+                rel = self.perception.get_block_relative_position(x, y)
+                camera_pos = (rel[0], rel[1])
+                print(f"  📷 Camera 检测到 {COLOR_NAMES.get(color, color)}: 前={rel[0]:.3f}m, 左={rel[1]:.3f}m")
+                break
 
-        # 用 grasp_block 正面抓取
-        self.arm.grasp_block(rel_x, rel_y, block_z=0.05, gripper=self.gripper)
+        # ===== 步骤3: 融合定位，确定最终抓取坐标 =====
+        grasp_forward = None
+        grasp_left = None
+        use_lidar_for_adjustment = False
 
-        # 检查是否抓取成功
+        if lidar_pos and camera_pos:
+            # 两者都有，验证一致性
+            l_dist = math.sqrt(lidar_pos[0]**2 + lidar_pos[1]**2)
+            c_dist = math.sqrt(camera_pos[0]**2 + camera_pos[1]**2)
+            if abs(l_dist - c_dist) < 0.15:
+                # 一致，用 Lidar 精确位置
+                grasp_forward, grasp_left = lidar_pos
+                print(f"  ✅ 融合定位一致，使用 Lidar 精确位置")
+            else:
+                # 不一致，优先用 Lidar
+                grasp_forward, grasp_left = lidar_pos
+                print(f"  ⚠️ 融合定位不一致 (Lidar={l_dist:.3f}m, Camera={c_dist:.3f}m)，优先用 Lidar")
+        elif lidar_pos:
+            grasp_forward, grasp_left = lidar_pos
+            print(f"  📡 仅 Lidar 检测到，使用 Lidar 位置")
+        elif camera_pos:
+            grasp_forward, grasp_left = camera_pos
+            print(f"  📷 仅 Camera 检测到，使用 Camera 位置")
+        else:
+            # 都没检测到，用 Supervisor 给的坐标
+            block_pos = self._get_block_position(self.current_color)
+            robot_pos = self.drive.get_position()
+            robot_angle = self.drive.get_orientation()
+            dx = block_pos[0] - robot_pos[0]
+            dy = block_pos[1] - robot_pos[1]
+            cos_a = math.cos(robot_angle)
+            sin_a = math.sin(robot_angle)
+            grasp_forward = dx * cos_a + dy * sin_a
+            grasp_left = -dx * sin_a + dy * cos_a
+            print(f"  ⚠️ 传感器未检测到，使用 Supervisor 坐标: 前={grasp_forward:.3f}m, 左={grasp_left:.3f}m")
+
+        # ===== 步骤4: 如果木块左右偏移超过 3cm，用底盘微调 =====
+        if abs(grasp_left) > 0.03:
+            print(f"  🔄 木块左右偏移 {grasp_left:.3f}m，底盘微调...")
+            # 横向移动（麦克纳姆轮优势）
+            move_direction = -grasp_left * 0.8  # 往木块方向移动
+            move_direction = max(-0.05, min(0.05, move_direction))  # 限幅
+            self.drive.move(0.0, move_direction, 0.0)
+            self.robot.step(32 * 15)
+            self.drive.stop()
+            print(f"  ✅ 底盘微调完成")
+
+            # 微调后重新用 Lidar 扫描确认
+            if self.perception.lidar and self.perception.lidar.enabled:
+                new_lidar_pos = self.perception.lidar.locate_block_exact()
+                if new_lidar_pos:
+                    grasp_forward, grasp_left = new_lidar_pos
+                    print(f"  📡 微调后 Lidar 重新定位: 前={grasp_forward:.3f}m, 左={grasp_left:.3f}m")
+
+        # ===== 步骤5: 如果木块前后距离太远，再前进一点 =====
+        # 机械臂基座在机器人前方 0.156m，臂展 0.461m
+        # 夹爪能到达的最远水平距离 ≈ 0.156 + 0.461 = 0.617m
+        # 但地面抓取时，机械臂需要垂直下探，水平伸展受限
+        # 最佳抓取距离：木块在机器人前方 0.10~0.18m
+        if grasp_forward > 0.18:
+            print(f"  🔄 木块距离 {grasp_forward:.3f}m 稍远，再前进一点...")
+            move_dist = grasp_forward - 0.12  # 前进到距离 0.12m
+            move_dist = max(0.02, min(0.08, move_dist))  # 限幅 2~8cm
+            self.drive.move(move_dist, 0.0, 0.0)
+            self.robot.step(32 * 15)
+            self.drive.stop()
+            print(f"  ✅ 前进 {move_dist:.3f}m 完成")
+
+            # 重新扫描
+            if self.perception.lidar and self.perception.lidar.enabled:
+                new_lidar_pos = self.perception.lidar.locate_block_exact()
+                if new_lidar_pos:
+                    grasp_forward, grasp_left = new_lidar_pos
+                    print(f"  📡 前进后 Lidar 重新定位: 前={grasp_forward:.3f}m, 左={grasp_left:.3f}m")
+
+        # ===== 步骤6: 执行抓取 =====
+        print(f"  🦾 最终抓取坐标: 前={grasp_forward:.3f}m, 左={grasp_left:.3f}m")
+        self.arm.grasp_block(grasp_forward, grasp_left, block_z=0.05, gripper=self.gripper)
+
+        # ===== 步骤7: 检查抓取结果 =====
         if self.gripper.grasp_detected:
             print(f"  ✊ 成功抓取 {COLOR_NAMES.get(self.current_color, self.current_color)} 木块!")
             self._transition_to("LIFT")
@@ -268,27 +363,34 @@ class FSM:
                 print(f"  ✊ 抓取成功!")
                 self._transition_to("LIFT")
             else:
-                print(f"  ⚠️ 抓取失败，尝试再靠近一点...")
-                # 再前进 3cm
-                self.drive.move(0.03, 0.0, 0.0)
+                print(f"  ⚠️ 第一次抓取失败，尝试重试...")
+                
+                # 重试策略：再前进 2cm
+                self.drive.move(0.02, 0.0, 0.0)
                 self.robot.step(32 * 15)
                 self.drive.stop()
-
-                # 重新计算位置
-                robot_pos = self.drive.get_position()
-                dx = block_pos[0] - robot_pos[0]
-                dy = block_pos[1] - robot_pos[1]
-                rel_x = dx * cos_a + dy * sin_a
-                rel_y = -dx * sin_a + dy * cos_a
-
-                self.arm.grasp_block(rel_x, rel_y, block_z=0.05, gripper=self.gripper)
-
+                
+                # 重新用 Lidar 扫描
+                if self.perception.lidar and self.perception.lidar.enabled:
+                    retry_pos = self.perception.lidar.locate_block_exact()
+                    if retry_pos:
+                        grasp_forward, grasp_left = retry_pos
+                        print(f"  📡 重试 Lidar 定位: 前={grasp_forward:.3f}m, 左={grasp_left:.3f}m")
+                
+                self.arm.grasp_block(grasp_forward, grasp_left, block_z=0.05, gripper=self.gripper)
+                
                 if self.gripper.grasp_detected:
                     print(f"  ✊ 重试成功!")
                     self._transition_to("LIFT")
                 else:
-                    print(f"  ❌ 抓取失败，跳过此木块")
-                    self._transition_to("ERROR")
+                    grasp_success = self.gripper.wait_for_grasp(timeout_steps=80)
+                    if grasp_success:
+                        print(f"  ✊ 重试成功!")
+                        self._transition_to("LIFT")
+                    else:
+                        print(f"  ❌ 抓取失败，跳过此木块")
+                        self._transition_to("ERROR")
+
 
     def _state_LIFT(self):
         """抬起木块"""

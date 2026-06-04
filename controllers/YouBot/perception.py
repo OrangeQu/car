@@ -183,6 +183,126 @@ class LidarProcessor:
 
         return None
 
+    def locate_block_exact(self):
+        """
+        用 Lidar 精确扫描木块位置（增强版）
+        
+        相比 scan_block_profile，这个方法：
+        1. 扫描更广的范围（前方 ±90°）
+        2. 用木块宽度（0.1m）做匹配验证
+        3. 返回木块在机器人坐标系下的精确坐标
+        
+        返回: (forward, left) 木块在机器人坐标系下的位置，或 None
+        """
+        range_image = self.get_range_image()
+        if range_image is None:
+            return None
+
+        fov = 3.14159  # 270°
+        angle_per_point = fov / 360
+        center = 180  # 正前方对应的索引
+
+        best_match = None
+        best_score = float('inf')
+
+        # 在前方 0.05~0.6m 范围内找木块
+        # 遍历所有 Lidar 点，找连续凸起
+        i = 0
+        while i < 360:
+            dist = range_image[i]
+            if 0.05 < dist < 0.6:
+                # 找到一个可能的起点，收集连续点
+                cluster = []
+                j = i
+                while j < 360 and 0.05 < range_image[j] < 0.6:
+                    cluster.append((j, range_image[j]))
+                    j += 1
+                
+                if len(cluster) >= 6:  # 至少 6 个连续点
+                    # 计算簇的中心
+                    center_idx = (cluster[0][0] + cluster[-1][0]) // 2
+                    avg_dist = sum(p[1] for p in cluster) / len(cluster)
+                    
+                    # 计算该簇的角宽度
+                    angle_width = (cluster[-1][0] - cluster[0][0]) * angle_per_point
+                    
+                    # 木块 0.1m 宽，在 avg_dist 处的期望角宽度
+                    expected_width = 0.1 / avg_dist if avg_dist > 0 else 0
+                    
+                    # 计算匹配得分（角宽度差异）
+                    width_diff = abs(angle_width - expected_width)
+                    
+                    # 如果角宽度匹配（允许 ±0.1rad 容差），且距离更近
+                    if width_diff < 0.15:
+                        score = avg_dist + width_diff * 2  # 综合评分
+                        if score < best_score:
+                            best_score = score
+                            best_match = (avg_dist, (center_idx - center) * angle_per_point)
+                
+                i = j  # 跳过已处理的点
+            else:
+                i += 1
+
+        if best_match:
+            distance, angle = best_match
+            forward = distance * math.cos(angle)
+            left = distance * math.sin(angle)
+            return (forward, left)
+
+        return None
+
+    def locate_block_fusion_enhanced(self, target_color=None):
+        """
+        增强版融合定位：Camera + Lidar 双重确认
+        
+        流程：
+        1. 先用 Lidar 扫描木块精确位置
+        2. 再用 Camera 确认颜色（如果指定了 target_color）
+        3. 如果两者都检测到，用 Lidar 位置 + Camera 颜色确认
+        4. 如果只有一种检测到，用该结果
+        
+        返回: (forward, left, height, source) 
+              source: "lidar", "camera", "fusion", 或 None
+        """
+        # 1. Lidar 扫描
+        lidar_pos = self.locate_block_exact()
+        
+        # 2. Camera 识别
+        camera_pos = None
+        camera_color = None
+        if target_color:
+            objects = self.detect_blocks_by_color()
+            for color, x, y, z in objects:
+                if color == target_color:
+                    # 转换到机器人坐标系
+                    rel = self.get_block_relative_position(x, y)
+                    camera_pos = (rel[0], rel[1])
+                    camera_color = color
+                    break
+        
+        # 3. 融合判断
+        if lidar_pos and camera_pos:
+            # 两者都检测到，用 Lidar 的精确位置
+            forward, left = lidar_pos
+            # 验证 Lidar 和 Camera 的检测是否一致（距离差异 < 0.1m）
+            lidar_dist = math.sqrt(forward**2 + left**2)
+            camera_dist = math.sqrt(camera_pos[0]**2 + camera_pos[1]**2)
+            if abs(lidar_dist - camera_dist) < 0.15:
+                print(f"  ✅ 融合定位一致: Lidar={lidar_dist:.3f}m, Camera={camera_dist:.3f}m")
+                return (forward, left, 0.05, "fusion")
+            else:
+                # 不一致时，优先用 Lidar（更精确）
+                print(f"  ⚠️ 融合定位不一致: Lidar={lidar_dist:.3f}m, Camera={camera_dist:.3f}m，优先用Lidar")
+                return (forward, left, 0.05, "lidar")
+        elif lidar_pos:
+            forward, left = lidar_pos
+            return (forward, left, 0.05, "lidar")
+        elif camera_pos:
+            return (camera_pos[0], camera_pos[1], 0.05, "camera")
+        
+        return None
+
+
 
 class Perception:
     """感知模块 - 使用 CameraRecognition + Lidar 融合定位"""

@@ -59,13 +59,18 @@ PLACEMENT = {
 # 因此底盘必须非常靠近木块（距离 < 0.05m）
 NAVIGATION = {
     "approach_distance": 0.50,      # 接近木块的目标距离 [m]（从远处导航到此距离）
-    "grasp_distance": 0.05,         # 抓取距离 [m]（底盘需要靠近到木块前方 0.05m）
+    "grasp_distance": 0.12,         # 抓取距离 [m]（底盘需要靠近到木块前方 0.12m，避免车头碰撞）
     "table_approach_distance": 0.66, # 接近桌子的距离 [m]（安全点距离桌子中心0.6m，到达时距离<0.65m即认为已到达）
     "position_tolerance": 0.03,     # 位置容差 [m]
     "angle_tolerance": 0.05,        # 角度容差 [rad]
     "obstacle_distance": 0.3,       # 障碍物检测距离 [m]
     "max_navigation_time": 60.0,    # 最大导航时间 [s]
+    # Lidar 防碰撞参数
+    "lidar_stop_distance": 0.15,    # Lidar 紧急停止距离 [m]（车头即将碰撞）
+    "lidar_slow_distance": 0.25,    # Lidar 减速距离 [m]
+    "lidar_precision_stop": 0.12,   # Lidar 精确停止距离 [m]（木块在正前方时停车）
 }
+
 
 # ==================== Lidar 参数 ====================
 LIDAR_CONFIG = {
