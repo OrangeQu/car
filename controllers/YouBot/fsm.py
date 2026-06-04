@@ -11,7 +11,7 @@ INIT → WAIT_ORDER → NAVIGATE_TO_BLOCK → APPROACH_BLOCK → GRASP_BLOCK
 """
 
 import math
-from config import NAVIGATION, COLOR_NAMES, SIDE_GRASP
+from config import NAVIGATION, COLOR_NAMES, SIDE_GRASP, TABLE_EDGE_TARGETS
 
 
 class FSM:
@@ -41,6 +41,11 @@ class FSM:
 
         # 导航子状态
         self.nav_phase = "far"  # far / near / precision
+        
+        # 导航到桌子时的中间点标志（蓝/黄需要分两段导航）
+        self.nav_midpoint = False  # 是否正在导航到中间点
+        self.nav_midpoint_target = None  # 中间点坐标 (x, y)
+        self.nav_midpoint_done = False  # 是否已完成中间点阶段
 
         print("  ✓ 有限状态机初始化完成")
 
@@ -400,38 +405,101 @@ class FSM:
 
     def _state_NAVIGATE_TO_TABLE(self):
         """
-        导航到桌子正前方（北侧 0.6m 处），面向桌子中心
+        导航到桌子指定边缘，面向桌子中心
         
-        固定目标点：(0, 0.6) 朝向 -π/2（朝南）
-        这样 place_on_table 的机械臂姿态才能正确工作
+        根据当前木块颜色选择不同的桌子边缘：
+        - 红色 → 北侧（朝南）
+        - 蓝色 → 东侧（朝西）
+        - 绿色 → 南侧（朝北）
+        - 黄色 → 西侧（朝东）
+        
+        导航策略：
+        1. 每次先检查到桌子中心的距离，如果 < 0.8m 直接进入放置
+        2. 蓝色/黄色距离目标 > 2m 时，分两段导航：
+           - 蓝色：先到 (4, 0)，再到 (0.7, 0)
+           - 黄色：先到 (-4, 0)，再到 (-0.7, 0)
+        3. 导航超时后也检查到桌子中心的距离，< 0.8m 则进入放置，否则报错
         """
-        table_pos = self.table_position
-        approach_dist = NAVIGATION["table_approach_distance"]
-        dist = self._get_distance_to(table_pos[0], table_pos[1])
+        if self.current_color is None:
+            self._transition_to("ERROR")
+            return
 
-        if dist < approach_dist:
-            print(f"  ✅ 已到达桌子附近 (距离={dist:.2f}m)")
+        # 根据当前木块颜色获取桌子边缘导航目标
+        edge_target = TABLE_EDGE_TARGETS.get(self.current_color)
+        if edge_target is None:
+            print(f"  ⚠️ 未找到 {self.current_color} 对应的桌子边缘目标，使用默认北侧")
+            target_x, target_y = 0.0, 0.6
+            target_angle = -math.pi / 2
+        else:
+            target_x, target_y = edge_target["position"]
+            target_angle = edge_target["angle"]
+
+        # 检查是否已到达桌子附近（到桌子中心的距离 < 0.8m）
+        dist_to_table_center = self._get_distance_to(0.0, 0.0)
+        if dist_to_table_center < 0.8:
+            print(f"  ✅ 已到达桌子附近 (距离桌子中心={dist_to_table_center:.2f}m)")
             self.drive.stop()
+            self.nav_midpoint = False
+            self.nav_midpoint_target = None
             self._transition_to("PLACE_ON_TABLE")
             return
 
-        # 固定目标点：桌子正前方（北侧 0.6m），面向南
-        target_x, target_y = 0.0, 0.6
-        target_angle = -math.pi / 2  # 朝南（面向桌子中心）
+        # ===== 蓝色/黄色分两段导航 =====
+        # 蓝色从 (4, 4) 到 (0.7, 0) 需要斜穿场地，goto_target 可能无法处理大角度差
+        # 所以先导航到 (4, 0)，再导航到 (0.7, 0)
+        # 黄色同理：先到 (-4, 0)，再到 (-0.7, 0)
+        if self.current_color in ["blue", "yellow"] and not self.nav_midpoint_done:
+            dist_to_target = self._get_distance_to(target_x, target_y)
+            if dist_to_target > 2.0:
+                # 需要分两段导航，先设置中间点
+                if self.current_color == "blue":
+                    mid_x, mid_y = 4.0, 0.0
+                else:  # yellow
+                    mid_x, mid_y = -4.0, 0.0
+                self.nav_midpoint = True  # 标记正在导航到中间点
+                self.nav_midpoint_target = (mid_x, mid_y)
+                print(f"  🚗 分两段导航: 先到中间点 ({mid_x:.1f}, {mid_y:.1f})")
+                
+                # 启动导航到中间点
+                self.drive.start_navigation(mid_x, mid_y, target_angle)
+                # 注意：这里不 return，继续执行下面的导航逻辑
 
+        # 确定当前导航目标
+        if self.nav_midpoint and self.nav_midpoint_target is not None:
+            current_target_x, current_target_y = self.nav_midpoint_target
+            target_desc = f"中间点 ({current_target_x:.1f}, {current_target_y:.1f})"
+        else:
+            current_target_x, current_target_y = target_x, target_y
+            target_desc = f"桌子 {COLOR_NAMES.get(self.current_color, self.current_color)} 边缘 ({current_target_x:.2f}, {current_target_y:.2f})"
+
+        # 启动或继续导航
         if not self.drive.is_navigation_active():
-            print(f"  🚗 导航到桌子: 目标 ({target_x:.2f}, {target_y:.2f}), 朝向 {target_angle:.2f}rad")
-            self.drive.start_navigation(target_x, target_y, target_angle)
+            print(f"  🚗 导航到 {target_desc}, 朝向 {target_angle:.2f}rad")
+            self.drive.start_navigation(current_target_x, current_target_y, target_angle)
 
         reached = self.drive.run_navigation()
 
         if reached:
-            self.drive.stop()
-            self._transition_to("PLACE_ON_TABLE")
-
-        if self._is_timeout(60.0):
-            print(f"  ⚠️ 导航到桌子超时")
-            self._transition_to("ERROR")
+            # 导航结束（正常到达或超时）
+            if self.nav_midpoint and self.nav_midpoint_target is not None:
+                # 到达中间点，切换到目标点
+                print(f"  ✅ 已到达中间点，继续导航到目标点")
+                self.nav_midpoint = False
+                self.nav_midpoint_target = None
+                self.nav_midpoint_done = True  # 标记中间点阶段已完成
+                self.drive.stop()
+                # 下一帧会导航到目标点
+                return
+            else:
+                # 到达目标点，检查是否在桌子附近
+                dist_to_table = self._get_distance_to(0.0, 0.0)
+                if dist_to_table < 0.8:
+                    print(f"  ✅ 已到达桌子附近 (距离桌子中心={dist_to_table:.2f}m)")
+                    self.drive.stop()
+                    self._transition_to("PLACE_ON_TABLE")
+                else:
+                    print(f"  ❌ 导航结束但未到达桌子附近 (距离桌子中心={dist_to_table:.2f}m)")
+                    self._transition_to("ERROR")
 
     def _state_PLACE_ON_TABLE(self):
         """平稳放置木块到桌面"""
