@@ -82,6 +82,7 @@ class YouBotController:
         print("键盘控制:")
         print("  V - 打印视觉识别信息")
         print("  P - 打印物体识别信息")
+        print("  L - 打印 Lidar 信息")
         print("  W/S - 前进/后退")
         print("  A/D - 左转/右转")
         print("  Q/E - 左移/右移")
@@ -180,6 +181,24 @@ class YouBotController:
             print("\n📦 检测到的彩色木块:")
             for color, x, y, z in blocks:
                 print(f"  {COLOR_NAMES.get(color, color)}: ({x:.3f}, {y:.3f}, {z:.3f})")
+
+        elif key == ord('L'):  # 打印 Lidar 信息
+            print("\n" + "=" * 60)
+            print("📡 Lidar 传感器信息")
+            print("=" * 60)
+            if self.perception.lidar and self.perception.lidar.enabled:
+                min_dist = self.perception.lidar.get_min_distance_in_full_range()
+                front_dist = self.perception.lidar.get_min_distance_in_angle_range(30)
+                block_profile = self.perception.lidar.scan_block_profile()
+                print(f"  全方向最近距离: {min_dist:.3f}m")
+                print(f"  前方 ±30° 最近距离: {front_dist:.3f}m")
+                if block_profile:
+                    print(f"  检测到木块轮廓: 距离={block_profile[0]:.3f}m, 角度={block_profile[1]:.3f}rad")
+                else:
+                    print(f"  未检测到木块轮廓")
+            else:
+                print(f"  Lidar 未启用")
+            print("=" * 60 + "\n")
 
         elif key == ord('W'):  # 前进
             self.drive.move(0.3, 0.0, 0.0)

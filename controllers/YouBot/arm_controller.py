@@ -385,7 +385,7 @@ class ArmController:
     def _scan_with_arm1(self, gripper):
         """
         用 arm1 左右摆动扫描，用夹爪传感器检测木块的实际位置
-        
+         
         返回: 检测到的 arm1 偏移角度 [rad]，如果没有检测到返回 0.0
         """
         gripper.open()
@@ -407,6 +407,111 @@ class ArmController:
             self._wait_for_motors(8)
         
         return 0.0
+
+    def side_grasp_block(self, block_forward, block_left, block_z=0.05, gripper=None):
+        """
+        从侧面抓取木块（核心改进！）
+        
+        参数:
+            block_forward: 木块在机器人坐标系下的前后偏移 [m]
+                           （正=前方，负=后方）
+            block_left: 木块在机器人坐标系下的左右偏移 [m]
+                        （正=左侧，负=右侧）
+            block_z: 木块高度 [m]
+            gripper: GripperController 实例
+        
+        流程:
+        1. 用 arm1 旋转指向木块方向
+        2. 用 IK 计算机械臂需要伸展的距离
+        3. 预抓取：移动到木块上方
+        4. 逐步下探 + 夹爪检测
+        """
+        print(f"\n  🦾 ===== 侧面抓取开始 =====")
+        print(f"  🎯 木块相对位置: 前={block_forward:.3f}m, 左={block_left:.3f}m")
+        
+        # 1. 计算 arm1 旋转角度
+        # 木块在基座坐标系中的位置
+        # 基座在机器人前方 0.156m
+        base_forward = block_forward - ARM_BASE_OFFSET_X
+        base_left = block_left
+        
+        # arm1 需要旋转的角度（指向木块）
+        arm1_target = math.atan2(base_left, base_forward)
+        
+        # 木块到基座的距离
+        dist_to_block = math.sqrt(base_forward**2 + base_left**2)
+        
+        print(f"  📐 arm1 目标角度: {arm1_target:.3f} rad")
+        print(f"  📏 基座到木块距离: {dist_to_block:.3f} m")
+        
+        # 2. 旋转 arm1 指向木块
+        self.motors["arm1"].setPosition(arm1_target)
+        self._wait_for_motors(40)
+        
+        # 3. 用 IK 计算机械臂姿态
+        # 旋转后，木块在机械臂正前方 dist_to_block 处
+        # 目标：夹爪到达 (dist_to_block, 0, block_z)
+        angles = self.ik(dist_to_block, 0, block_z)
+        
+        if angles is None:
+            print(f"  ⚠️ IK 无解，尝试调整距离")
+            # 稍微调整距离重试
+            angles = self.ik(dist_to_block + 0.02, 0, block_z)
+        
+        if angles is None:
+            print(f"  ❌ IK 仍然无解，使用预设姿态")
+            self.set_pose("grasp_low")
+            self._wait_for_motors(60)
+        else:
+            # 4. 移动到预抓取位置（木块上方 5cm）
+            print(f"  🦾 移动到预抓取位置")
+            self.set_joint_angles(angles)
+            self._wait_for_motors(60)
+        
+        # 5. 逐步下探 + 夹爪检测（复用现有逻辑）
+        if gripper is not None:
+            self._probe_and_grasp(gripper)
+        
+        print(f"  🦾 ===== 侧面抓取结束 =====\n")
+
+    def _probe_and_grasp(self, gripper):
+        """
+        逐步下探 + 夹爪检测抓取
+        
+        从当前姿态开始，逐步降低 arm2 让夹爪下降
+        每次步进后尝试闭合夹爪检测
+        """
+        gripper.open()
+        self._wait_for_motors(20)
+        
+        # 逐步减小 arm2 下探
+        current_arm2 = self.get_actual_angles().get("arm2", 0.0)
+        arm2_min = -1.13446  # 物理限位
+        arm2_step = -0.02
+        
+        contact_count = 0
+        max_contacts = 6
+        
+        while current_arm2 >= arm2_min and contact_count < max_contacts:
+            self.motors["arm2"].setPosition(current_arm2)
+            self._wait_for_motors(15)
+            
+            gripper.close()
+            self._wait_for_motors(8)
+            
+            if gripper.wait_for_grasp(timeout_steps=40):
+                contact_count += 1
+                if contact_count >= max_contacts:
+                    print(f"  ✅ 成功抓取! (arm2={current_arm2:.3f})")
+                    return True
+                gripper.open()
+                self._wait_for_motors(8)
+            
+            gripper.open()
+            self._wait_for_motors(5)
+            current_arm2 += arm2_step
+        
+        return contact_count > 0
 
     def grasp_block(self, block_x, block_y, block_z=0.05, gripper=None, offset_y=0.0):
         """
@@ -586,19 +691,18 @@ class ArmController:
 
     def place_on_table(self, gripper=None):
         """
-        平稳放置木块到桌面（保持 arm2/arm3 在 carry 姿态，只弯曲 arm4 下降）
+        平稳放置木块到桌面
         
         策略：
-        1. 从 carry 过渡到 place_mid（arm2=1.2, arm3=-1.5, arm4=0，只收 arm4）
-        2. 保持 arm2/arm3 不变，逐步弯曲 arm4 降低夹爪高度到桌面表面
-        3. 张开夹爪释放木块
+        1. 从 carry 过渡到 place_mid（arm2=0.8, arm3=-1.2, arm4=0）
+        2. 保持 arm2/arm3 不变，逐步弯曲 arm4 降低夹爪
+           - 目标高度 = 桌面高度 + 木块半高（约 0.025m），让木块刚好接触桌面
+        3. 张开夹爪释放木块（此时木块已接触桌面，不会掉落）
         4. 抬升夹爪
         
         关键参数：
-        - arm2=1.2, arm3=-1.5 → 机械臂向前伸出，重力平衡稳定
-        - arm4 从 0 逐步弯曲到负值，降低夹爪高度
-        - 注意：arm4 正方向=朝北（y正方向）弯曲，负方向=朝南（y负方向）弯曲
-        - 小车在 (0, 0.6) 面向南（朝桌子中心），arm4 负方向弯曲使夹爪朝南伸向桌子中心
+        - 小车在 (0, 0.6) 面向南（朝桌子中心）
+        - arm4 负方向弯曲使夹爪朝南伸向桌子中心
         
         参数:
             gripper: GripperController 实例，用于控制夹爪
@@ -610,15 +714,15 @@ class ArmController:
         current_angles = self.get_actual_angles()
         current_pos = self.forward_kinematics(current_angles)
         current_height = current_pos[2]
-        print(f"  📏 当前夹爪高度: {current_height:.3f}m (目标: {TABLE_SURFACE_Z:.3f}m)")
+        print(f"  📏 当前夹爪高度: {current_height:.3f}m")
         print(f"  📐 当前实际角度: arm2={current_angles.get('arm2',0):.3f}, arm3={current_angles.get('arm3',0):.3f}, arm4={current_angles.get('arm4',0):.3f}")
         
-        # 步骤1: 从 carry 过渡到 place_mid（只收 arm4，保持 arm2/arm3 不变）
-        print(f"  🦾 步骤1: 过渡到中间姿态 place_mid（只收 arm4）")
+        # 步骤1: 从 carry 过渡到 place_mid
+        print(f"  🦾 步骤1: 过渡到中间姿态 place_mid")
         self.set_pose("place_mid")
-        if not self._wait_for_arm_ready(POSES["place_mid"], tolerance=0.08, max_steps=500, debug=True):
-            print(f"  ⚠️ place_mid 未到位，继续等待...")
-            self._wait_for_motors(200)
+        if not self._wait_for_arm_ready(POSES["place_mid"], tolerance=0.15, max_steps=800, debug=True):
+            print(f"  ⚠️ place_mid 未完全到位，继续等待...")
+            self._wait_for_motors(300)
         
         # 验证当前高度
         current_angles = self.get_actual_angles()
@@ -627,16 +731,21 @@ class ArmController:
         print(f"     到达高度: {current_height:.3f}m")
         print(f"     实际角度: arm2={current_angles.get('arm2',0):.3f}, arm3={current_angles.get('arm3',0):.3f}, arm4={current_angles.get('arm4',0):.3f}")
         
-        # 步骤2: 保持 arm2/arm3 不变，逐步弯曲 arm4 降低夹爪高度到桌面表面
+        # 步骤2: 保持 arm2/arm3 不变，逐步弯曲 arm4 降低夹爪
+        # 目标高度 = 桌面高度 + 木块半高 + 安全余量
+        # 木块约 5cm 高，夹爪夹在木块中间，木块底部在夹爪中心下方 2.5cm
+        # 需要确保木块底部 ≥ 桌面高度，即夹爪中心 ≥ 桌面高度 + 2.5cm
+        # 再加 1.5cm 安全余量应对 arm2/arm3 偏移
         print(f"  🦾 步骤2: 保持 arm2/arm3 不变，逐步弯曲 arm4 降低夹爪")
         
-        # 从 arm4=0 逐步减小，直到夹爪高度达到桌面表面
         arm4_start = 0.0
         arm4_min = -1.75  # arm4 物理限位 -1.78024，留一点余量
         arm4_step = -0.03
         
         current_arm4 = arm4_start
-        target_height = TABLE_SURFACE_Z  # 0.350m
+        # 目标高度：桌面高度 + 木块半高(0.025) + 安全余量(0.015) = 0.390m
+        # 这样即使 arm2/arm3 有偏移，木块底部也能在桌面之上
+        target_height = TABLE_SURFACE_Z + 0.040  # 0.350 + 0.040 = 0.390m
         reached_target = False
         
         while current_arm4 >= arm4_min and not reached_target:
@@ -650,13 +759,12 @@ class ArmController:
             
             if current_height <= target_height + 0.005:  # 允许 5mm 容差
                 reached_target = True
-                print(f"     到达桌面高度: {current_height:.3f}m (arm4={current_arm4:.3f})")
+                print(f"     到达目标高度: {current_height:.3f}m (arm4={current_arm4:.3f})")
                 break
             
             current_arm4 += arm4_step
         
         if not reached_target:
-            # 如果 arm4 到限位还没到桌面高度，继续等待一下
             print(f"  ⚠️ arm4 到限位但高度={current_height:.3f}m，继续等待...")
             self._wait_for_motors(100)
             current_angles = self.get_actual_angles()
@@ -667,13 +775,13 @@ class ArmController:
         current_angles = self.get_actual_angles()
         current_pos = self.forward_kinematics(current_angles)
         final_height = current_pos[2]
-        print(f"     最终高度: {final_height:.3f}m (目标: {TABLE_SURFACE_Z:.3f}m)")
+        print(f"     最终高度: {final_height:.3f}m (目标: {target_height:.3f}m, 桌面: {TABLE_SURFACE_Z:.3f}m)")
         print(f"     实际角度: arm2={current_angles.get('arm2',0):.3f}, arm3={current_angles.get('arm3',0):.3f}, arm4={current_angles.get('arm4',0):.3f}")
         
-        # 步骤3: 缓慢张开夹爪释放木块（分步张开，让木块慢慢滑落）
+        # 步骤3: 缓慢张开夹爪释放木块
+        # 此时木块底部已接触桌面，张开夹爪后木块会自然落在桌面上
         print(f"  🦾 步骤3: 缓慢释放木块")
         if gripper is not None:
-            # 分3步张开夹爪，让木块慢慢滑落到桌面
             for i, open_pos in enumerate([0.02, 0.04, 0.06]):
                 gripper.set_gap(open_pos)
                 self._wait_for_motors(30)
@@ -682,7 +790,7 @@ class ArmController:
         else:
             print(f"     ⚠️ 无夹爪控制，跳过释放")
         
-        # 步骤4: 抬升夹爪避免碰撞（回到 place_mid）
+        # 步骤4: 抬升夹爪避免碰撞
         print(f"  🦾 步骤4: 抬升夹爪")
         self.set_pose("place_mid")
         self._wait_for_arm_ready(POSES["place_mid"], tolerance=0.08, max_steps=200)

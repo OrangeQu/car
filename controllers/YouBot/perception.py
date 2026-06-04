@@ -1,15 +1,191 @@
 """
 多传感器融合感知模块
-使用 CameraRecognition 识别彩色木块
+使用 CameraRecognition + Lidar 融合定位彩色木块
 """
 
 from controller import Robot
 import math
 import ctypes
+from config import LIDAR_CONFIG
+
+
+class LidarProcessor:
+    """激光雷达处理模块"""
+
+    def __init__(self, robot, timestep):
+        self.lidar = robot.getDevice("LidarTop")
+        self.enabled = False
+        if self.lidar:
+            self.lidar.enable(timestep)
+            self.lidar.enablePointCloud()
+            self.enabled = True
+            print("  ✓ Lidar 已启用")
+        else:
+            print("  ⚠️ 未找到 LidarTop 设备")
+
+    def get_range_image(self):
+        """获取距离图像"""
+        if not self.enabled or not self.lidar:
+            return None
+        return self.lidar.getRangeImage()
+
+    def get_block_position_from_lidar(self, expected_angle=0.0):
+        """
+        用 Lidar 在指定方向附近扫描，检测木块的精确位置
+
+        参数:
+            expected_angle: 期望木块所在的角度 [rad]（相对于 Lidar 正前方）
+
+        返回:
+            (distance, angle) 或 None
+        """
+        range_image = self.get_range_image()
+        if range_image is None:
+            return None
+
+        # Lidar 270° 视野，360 个点，角度分辨率 = 270/360 = 0.75°
+        fov = 3.14159  # 270° in rad
+        angle_per_point = fov / 360
+
+        center_index = 180  # 正前方对应的索引
+        expected_index = center_index + int(expected_angle / angle_per_point)
+
+        # 在期望角度附近 ±15° 搜索
+        search_range = int(15 * 3.14159 / 180 / angle_per_point)
+
+        best_dist = float('inf')
+        best_idx = -1
+
+        for i in range(max(0, expected_index - search_range),
+                       min(360, expected_index + search_range)):
+            dist = range_image[i]
+            # 过滤无效值和地面反射
+            if 0.1 < dist < 5.0:
+                if dist < best_dist:
+                    best_dist = dist
+                    best_idx = i
+
+        if best_idx >= 0:
+            angle = (best_idx - center_index) * angle_per_point
+            return (best_dist, angle)
+
+        return None
+
+    def get_min_distance_in_angle_range(self, angle_range_deg=30):
+        """
+        获取前方指定角度范围内的最近障碍物距离（用于防碰撞）
+
+        参数:
+            angle_range_deg: 角度范围 [度]（前方 ±angle_range_deg）
+
+        返回:
+            最小距离 [m]，如果没有障碍物返回 inf
+        """
+        range_image = self.get_range_image()
+        if range_image is None:
+            return float('inf')
+
+        fov = 3.14159
+        angle_per_point = fov / 360
+        center = 180
+        half_range = int(angle_range_deg * 3.14159 / 180 / angle_per_point)
+
+        min_dist = float('inf')
+        for i in range(center - half_range, center + half_range + 1):
+            if 0 <= i < 360:
+                dist = range_image[i]
+                if 0.1 < dist < 5.0:
+                    min_dist = min(min_dist, dist)
+
+        return min_dist
+
+    def get_min_distance_in_full_range(self):
+        """
+        获取全方向最近障碍物距离
+
+        返回:
+            最小距离 [m]，如果没有障碍物返回 inf
+        """
+        range_image = self.get_range_image()
+        if range_image is None:
+            return float('inf')
+
+        min_dist = float('inf')
+        for i in range(360):
+            dist = range_image[i]
+            if 0.1 < dist < 5.0:
+                min_dist = min(min_dist, dist)
+
+        return min_dist
+
+    def detect_block_cluster(self):
+        """
+        用 Lidar 检测木块（0.1m 立方体）的轮廓
+
+        原理：木块在地面上会形成一个 0.1m 宽的凸起
+        通过检测距离突变来识别木块边缘
+
+        返回: [(distance, angle), ...] 木块轮廓点列表
+        """
+        range_image = self.get_range_image()
+        if range_image is None:
+            return []
+
+        # 检测距离突变点（木块边缘）
+        edges = []
+        for i in range(1, 360):
+            if 0.1 < range_image[i] < 5.0 and 0.1 < range_image[i-1] < 5.0:
+                diff = abs(range_image[i] - range_image[i-1])
+                if diff > 0.05:  # 5cm 突变 → 可能是木块边缘
+                    edges.append(i)
+
+        return edges
+
+    def scan_block_profile(self):
+        """
+        扫描木块轮廓，获取木块中心位置
+
+        返回: (distance, angle) 木块中心位置，或 None
+        """
+        range_image = self.get_range_image()
+        if range_image is None:
+            return None
+
+        fov = 3.14159
+        angle_per_point = fov / 360
+        center = 180
+
+        # 找前方 0.1~0.5m 范围内的连续凸起
+        # 木块 0.1m 立方体，在 0.5m 处约占 0.1/0.5 ≈ 0.2rad ≈ 11.5°
+        # 对应约 15 个 Lidar 点
+        block_points = []
+        in_block = False
+        block_start = 0
+
+        for i in range(360):
+            dist = range_image[i]
+            if 0.05 < dist < 0.5:  # 5cm~50cm 范围内
+                if not in_block:
+                    in_block = True
+                    block_start = i
+                block_points.append((i, dist))
+            else:
+                if in_block:
+                    # 检查这个连续段的长度是否匹配木块
+                    if len(block_points) >= 5:  # 至少 5 个点
+                        # 计算平均距离和中心角度
+                        avg_dist = sum(p[1] for p in block_points) / len(block_points)
+                        center_idx = (block_points[0][0] + block_points[-1][0]) // 2
+                        angle = (center_idx - center) * angle_per_point
+                        return (avg_dist, angle)
+                    in_block = False
+                    block_points = []
+
+        return None
 
 
 class Perception:
-    """感知模块 - 使用 CameraRecognition 检测木块"""
+    """感知模块 - 使用 CameraRecognition + Lidar 融合定位"""
 
     def __init__(self, robot, timestep):
         self.robot = robot
@@ -31,11 +207,14 @@ class Perception:
         if not self.camera:
             print("  ⚠️ 未找到摄像头设备")
 
+        # 初始化 Lidar
+        self.lidar = LidarProcessor(robot, timestep)
+
         # 机器人位姿回调
         self.get_position = None
         self.get_orientation = None
 
-        print("  ✓ 感知模块初始化完成")
+        print("  ✓ 感知模块初始化完成（Camera + Lidar）")
 
     def set_robot_pose_callback(self, get_position_func, get_orientation_func):
         """设置获取机器人位姿的回调函数"""
@@ -198,3 +377,63 @@ class Perception:
         """检查木块是否在抓取范围内"""
         _, _, distance = self.get_block_relative_position(block_x, block_y)
         return distance <= grasp_distance
+
+    def locate_block_fusion(self, target_color):
+        """
+        Camera + Lidar 融合定位木块
+
+        流程:
+        1. Camera 识别颜色 → 得到木块在图像中的像素位置
+        2. 像素位置 → 角度（Camera 视野 1.064rad，160px）
+        3. Lidar 在该角度方向扫描 → 得到精确距离
+        4. 融合计算 → 木块在机器人坐标系下的精确坐标
+
+        返回: (forward, left, height) 或 None
+        """
+        # 1. Camera 识别
+        objects = self.get_visual_objects()
+        target_obj = None
+        for obj in objects:
+            colors = obj.get('colors', [])
+            if len(colors) >= 3:
+                color_name = self._classify_color(colors[0], colors[1], colors[2])
+                if color_name == target_color:
+                    target_obj = obj
+                    break
+
+        if not target_obj:
+            # Camera 没识别到，尝试用 Lidar 扫描
+            lidar_result = self.lidar.scan_block_profile()
+            if lidar_result:
+                distance, angle = lidar_result
+                forward = distance * math.cos(angle)
+                left = distance * math.sin(angle)
+                return (forward, left, 0.05)
+            return None
+
+        # 2. 从 Camera 获取物体在图像中的位置
+        img_x, img_y = target_obj['position_on_image']
+        img_width = 160  # Camera 宽度
+
+        # 3. 像素坐标 → 角度
+        # Camera 视野 1.064 rad，宽度 160px
+        # 中心像素 = 80，角度 = (像素 - 中心) * 视野/宽度
+        camera_fov = 1.064
+        angle_per_pixel = camera_fov / img_width
+        angle_from_center = (img_x - img_width/2) * angle_per_pixel
+
+        # 4. 用 Lidar 获取该方向上的精确距离
+        lidar_result = self.lidar.get_block_position_from_lidar(angle_from_center)
+
+        if lidar_result:
+            distance, lidar_angle = lidar_result
+        else:
+            # Lidar 没检测到，用 Camera 的估算距离
+            distance = target_obj.get('distance', 0.5)
+
+        # 5. 计算木块在机器人坐标系下的位置
+        forward = distance * math.cos(angle_from_center)
+        left = distance * math.sin(angle_from_center)
+        height = 0.05  # 木块高度（地面）
+
+        return (forward, left, height)

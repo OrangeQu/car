@@ -57,13 +57,31 @@ PLACEMENT = {
 # 地面抓取时，机械臂几乎垂直向下，水平伸展仅约 0.02m
 # 因此底盘必须非常靠近木块（距离 < 0.05m）
 NAVIGATION = {
-    "approach_distance": 0.30,      # 接近木块的目标距离 [m]（从远处导航到此距离）
+    "approach_distance": 0.50,      # 接近木块的目标距离 [m]（从远处导航到此距离）
     "grasp_distance": 0.05,         # 抓取距离 [m]（底盘需要靠近到木块前方 0.05m）
     "table_approach_distance": 0.66, # 接近桌子的距离 [m]（安全点距离桌子中心0.6m，到达时距离<0.65m即认为已到达）
     "position_tolerance": 0.03,     # 位置容差 [m]
     "angle_tolerance": 0.05,        # 角度容差 [rad]
     "obstacle_distance": 0.3,       # 障碍物检测距离 [m]
     "max_navigation_time": 60.0,    # 最大导航时间 [s]
+}
+
+# ==================== Lidar 参数 ====================
+LIDAR_CONFIG = {
+    "enabled": True,
+    "block_detection_range": 0.5,      # 木块检测范围 [m]
+    "collision_avoidance_angle": 30,   # 防碰撞检测角度范围 [度]（前方 ±30°）
+    "collision_stop_distance": 0.20,   # 防碰撞停止距离 [m]
+    "collision_slow_distance": 0.35,   # 防碰撞减速距离 [m]
+    "ground_z_threshold": 0.02,        # 地面过滤阈值 [m]（低于此值认为是地面）
+}
+
+# ==================== 侧面抓取参数 ====================
+SIDE_GRASP = {
+    "lateral_distance": 0.15,          # 底盘侧面离木块的距离 [m]
+    "forward_tolerance": 0.05,         # 前后方向容差 [m]（允许木块不在正侧面）
+    "arm1_scan_range": 0.3,            # arm1 扫描范围 [rad]
+    "arm1_scan_step": 0.02,            # arm1 扫描步长 [rad]
 }
 
 # ==================== 视觉参数 ====================
@@ -80,8 +98,8 @@ FSM_STATES = [
     "INIT",
     "WAIT_ORDER",
     "NAVIGATE_TO_BLOCK",
-    "APPROACH_BLOCK",
-    "GRASP",
+    "SIDE_APPROACH",       # 新增：侧面靠近木块
+    "SIDE_GRASP",          # 新增：侧面抓取木块
     "LIFT",
     "NAVIGATE_TO_TABLE",
     "PLACE_ON_TABLE",

@@ -48,8 +48,8 @@ WorldInfo {
   ]
 }
 Viewpoint {
-  orientation 0.016019821749134248 0.028702669276470805 -0.999459615035811 1.0184108756794117
-  position -5.055639925099956 6.206419421119188 0.4288159410795621
+  orientation 0.19295982917715376 0.4354701420584744 -0.879279397972849 0.9335797940988307
+  position -6.7979520196216185 7.263243084742439 2.5607492797293547
   follow "youBot"
 }
 TexturedBackground {
@@ -62,8 +62,8 @@ RectangleArena {
   wallHeight 0.05
 }
 Solid {
-  translation 6.1946274745911036e-18 -8.054203235628277e-17 0.4525475003318173
-  rotation 0.23084177946955725 -0.8638288169633969 -0.4477854931046188 4.5701443990780607e-17
+  translation 5.297388390977926e-17 -7.171500510573174e-17 0.6725474997920272
+  rotation -0.4235448398338175 0.6466299782340088 -0.6344126731861772 3.7362523384656926e-17
   children [
     Shape {
       appearance PBRAppearance {
@@ -188,12 +188,10 @@ Solid {
     density -1
     mass 50
   }
-  linearVelocity -3.5701346114481854e-17 -6.903624564804908e-18 -5.5468503765662796e-09
-  angularVelocity 5.11574482200666e-17 -5.909913816777498e-18 -1.725647578162697e-19
 }
 DEF red_block Solid {
-  translation -4 4 0.04990190009356342
-  rotation -0.5253486021448999 0.8405577634318407 0.13217977363750283 4.057549974583085e-17
+  translation -4 4 0.049901900000000096
+  rotation -0.9103906009045923 -0.10115451121162274 0.4011941159166131 2.107299201733892e-17
   children [
     Shape {
       appearance PBRAppearance {
@@ -218,8 +216,8 @@ DEF red_block Solid {
   ]
 }
 DEF blue_block Solid {
-  translation 4 4 0.04990190009356342
-  rotation -0.5253486021448999 0.8405577634318407 0.13217977363750283 4.057549974583085e-17
+  translation 4 4 0.049901900000000096
+  rotation 0.06210454016933928 0.9936726427094296 0.0935826117460582 3.4323226634767986e-17
   children [
     Shape {
       appearance PBRAppearance {
@@ -242,12 +240,10 @@ DEF blue_block Solid {
   recognitionColors [
     0 0 1
   ]
-  linearVelocity -1.2544785339989595e-17 -1.2509679436742268e-17 -1.4655150835155767e-09
-  angularVelocity 2.664535259100375e-16 -2.6645352591003756e-16 5.192087238674228e-17
 }
 DEF green_block Solid {
-  translation 4 -4 0.04990190009356342
-  rotation -0.5253486021448999 0.8405577634318407 0.13217977363750283 4.057549974583085e-17
+  translation 4 -4 0.049901900000000096
+  rotation 0.06210454016933928 0.9936726427094296 0.0935826117460582 3.4323226634767986e-17
   children [
     Shape {
       appearance PBRAppearance {
@@ -270,12 +266,10 @@ DEF green_block Solid {
   recognitionColors [
     0 1 0
   ]
-  linearVelocity -1.2544785339989595e-17 -1.2509679436742268e-17 -1.4655150835155767e-09
-  angularVelocity 2.664535259100375e-16 -2.6645352591003756e-16 5.192087238674228e-17
 }
 DEF yellow_block Solid {
-  translation -4 -4 0.04990190009356342
-  rotation -0.5253486021448999 0.8405577634318407 0.13217977363750283 4.057549974583085e-17
+  translation -4 -4 0.049901900000000096
+  rotation 0.06210454016933928 0.9936726427094296 0.0935826117460582 3.4323226634767986e-17
   children [
     Shape {
       appearance PBRAppearance {
@@ -298,12 +292,10 @@ DEF yellow_block Solid {
   recognitionColors [
     1 1 0
   ]
-  linearVelocity -1.2544785339989595e-17 -1.2509679436742268e-17 -1.4655150835155767e-09
-  angularVelocity 2.664535259100375e-16 -2.6645352591003756e-16 5.192087238674228e-17
 }
 DEF youBot Robot {
-  translation -3.615307705842482 3.376393718188927 0.10187832755303756
-  rotation -0.0008382193686031285 0.00043950785004286173 0.9999995521104696 2.1269683078159756
+  translation -3.10567 2.55276 0.10343
+  rotation 0.04215918241442637 0.026718588855056367 -0.9987535833966962 -0.03178530717958594
   children [
     BodyMesh {
     }
@@ -323,6 +315,18 @@ DEF youBot Robot {
         }
       ]
     }
+    Group {
+      children [
+        Lidar {
+          translation 0.25 0 0.15
+          name "LidarTop"
+          horizontalResolution 360
+          fieldOfView 3.14159
+          numberOfLayers 1
+          maxRange 5
+        }
+      ]
+    }
     DEF ARM Solid {
       translation 0.156 0 0
       children [
@@ -330,7 +334,7 @@ DEF youBot Robot {
         }
         HingeJoint {
           jointParameters HingeJointParameters {
-            position -1.6600114405030003e-06
+            position 1.2814374540705191e-07
             axis 0 0 1
             anchor 0 0 0.077
           }
@@ -348,13 +352,13 @@ DEF youBot Robot {
           ]
           endPoint Solid {
             translation 0 0 0.077
-            rotation 0 0 -0.9999999999999999 1.6601257893092459e-06
+            rotation 0 0 1 1.264405455326821e-07
             children [
               Arm1Mesh {
               }
               HingeJoint {
                 jointParameters HingeJointParameters {
-                  position 1.570003873062188
+                  position 1.5700039568903386
                   axis 0 -1 0
                   anchor 0.033 0 0.07
                 }
@@ -372,13 +376,13 @@ DEF youBot Robot {
                 ]
                 endPoint Solid {
                   translation 0.033 0 0.07
-                  rotation 0 -1 0 1.570003873062188
+                  rotation 0 -1 0 1.5700039568903388
                   children [
                     Arm2Mesh {
                     }
                     HingeJoint {
                       jointParameters HingeJointParameters {
-                        position -2.6350019065983687
+                        position -2.6350020135196064
                         axis 0 -1 0
                         anchor 0 0 0.155
                       }
@@ -395,13 +399,13 @@ DEF youBot Robot {
                       ]
                       endPoint Solid {
                         translation 0 0 0.155
-                        rotation 0 1 0 2.6350019065983687
+                        rotation 0 1 0 2.6350020135196064
                         children [
                           Arm3Mesh {
                           }
                           HingeJoint {
                             jointParameters HingeJointParameters {
-                              position 1.7800010532283574
+                              position 1.7800008879324136
                               axis 0 -1 0
                               anchor 0 0 0.135
                             }
@@ -418,13 +422,13 @@ DEF youBot Robot {
                             ]
                             endPoint Solid {
                               translation 0 0 0.135
-                              rotation 0 -1 0 1.7800010532283574
+                              rotation 0 -1 0 1.7800008879324136
                               children [
                                 Arm4Mesh {
                                 }
                                 HingeJoint {
                                   jointParameters HingeJointParameters {
-                                    position 1.5001922177405428e-07
+                                    position -8.070005710756664e-09
                                     axis 0 0 1
                                     anchor 0 0 0.081
                                   }
@@ -442,19 +446,18 @@ DEF youBot Robot {
                                   ]
                                   endPoint Solid {
                                     translation 0 0 0.081
-                                    rotation 0 0 1 1.490116119384766e-07
                                     children [
                                       Arm5Mesh {
                                       }
                                       SliderJoint {
                                         jointParameters JointParameters {
-                                          position 0.060000001763007196
+                                          position 0.06000000001181775
                                           axis 0 1 0
                                         }
                                         device [
                                           LinearMotor {
                                             name "finger::left"
-                                            maxPosition 0.06
+                                            maxPosition 0.060000001763007196
                                             maxForce 100
                                           }
                                           PositionSensor {
@@ -462,7 +465,7 @@ DEF youBot Robot {
                                           }
                                         ]
                                         endPoint Solid {
-                                          translation 0 0.060000001763007196 0.09
+                                          translation 0 0.06000000001181775 0.09
                                           rotation 1 0 0 4.71239
                                           children [
                                             FingerMesh {
@@ -500,19 +503,17 @@ DEF youBot Robot {
                                               0 0 8.29319e-07
                                             ]
                                           }
-                                          linearVelocity -0.1687409024820158 0.27363043549301186 5.002923095198906e-07
-                                          angularVelocity 1.713836152729515e-05 9.924612426727566e-06 -0.0017309277636550517
                                         }
                                       }
                                       SliderJoint {
                                         jointParameters JointParameters {
-                                          position 0.06000000173739783
+                                          position 0.05999999998820134
                                           axis 0 -1 0
                                         }
                                         device [
                                           LinearMotor {
                                             name "finger::right"
-                                            maxPosition 0.06
+                                            maxPosition 0.060000001763007196
                                             maxForce 100
                                           }
                                           PositionSensor {
@@ -520,7 +521,7 @@ DEF youBot Robot {
                                           }
                                         ]
                                         endPoint Solid {
-                                          translation 0 -0.06000000173739783 0.09
+                                          translation 0 -0.05999999998820134 0.09
                                           rotation 0 -0.7071067811865476 0.7071067811865476 3.14159
                                           children [
                                             FingerMesh {
@@ -529,8 +530,6 @@ DEF youBot Robot {
                                           name "finger::right"
                                           boundingObject USE FINGER_BO
                                           physics USE FINGER_PH
-                                          linearVelocity -0.16861299629221552 0.27342461083224157 5.870642919283941e-07
-                                          angularVelocity 1.713835916382955e-05 9.924610936623682e-06 -0.0017309278136895413
                                         }
                                       }
                                     ]
@@ -567,8 +566,6 @@ DEF youBot Robot {
                                         0 0 -0.00015098
                                       ]
                                     }
-                                    linearVelocity -0.1685967738478822 0.2735788389750966 1.631759530911818e-06
-                                    angularVelocity 1.7138342311311252e-05 9.92459769504183e-06 -0.0017309277922845279
                                   }
                                 }
                               ]
@@ -591,8 +588,6 @@ DEF youBot Robot {
                                   0 0 -5.99276e-20
                                 ]
                               }
-                              linearVelocity -0.16857727316170562 0.2736376123534292 2.1838294870611254e-06
-                              angularVelocity 1.6621534983656966e-05 1.075499977290794e-05 -0.0017320581504786273
                             }
                           }
                         ]
@@ -615,8 +610,6 @@ DEF youBot Robot {
                             0 0 1.56701e-20
                           ]
                         }
-                        linearVelocity -0.16854096078190345 0.27355494824854504 2.0191961859824287e-06
-                        angularVelocity 1.661872419671467e-05 1.0753058604334842e-05 -0.0017320588372918197
                       }
                     }
                   ]
@@ -641,8 +634,6 @@ DEF youBot Robot {
                       -0.000533052 -0.00082008 -0.00062712
                     ]
                   }
-                  linearVelocity -0.16852377833707818 0.2736478236419649 2.759705237155283e-06
-                  angularVelocity 1.661213659147435e-05 1.0748646393090642e-05 -0.0017320585494752874
                 }
               }
             ]
@@ -666,8 +657,6 @@ DEF youBot Robot {
                 0 0 -3.06558e-09
               ]
             }
-            linearVelocity -0.16849030745291052 0.27364943317372215 3.09081900325745e-06
-            angularVelocity 1.6604738394875485e-05 1.0743709326341786e-05 -0.0017320592979279386
           }
         }
       ]
@@ -711,7 +700,7 @@ DEF youBot Robot {
       name "wheel3"
       sensorName "wheel3sensor"
     }
-    DEF WHEEL4 InteriorWheel {
+    DEF WHEEL4 ExteriorWheel {
       translation -0.228 0.158 -0.055
       anchor -0.228 0.158 -0.055
       name "wheel4"
@@ -814,6 +803,4 @@ DEF youBot Robot {
   }
   controller "YouBot"
   supervisor TRUE
-  linearVelocity -0.1687159928252429 0.2735129491034868 5.418502085746718e-08
-  angularVelocity 1.657486058927939e-05 1.0756938742638448e-05 -0.0017154614698030473
 }

@@ -308,3 +308,30 @@ class MecanumDrive:
     def is_navigation_active(self):
         """检查导航是否在进行中"""
         return self.navigation_active
+
+    def move_with_lidar(self, vx, vy, omega, lidar_processor):
+        """
+        带 Lidar 防碰撞的移动
+        
+        在移动前检查前方是否有障碍物
+        如果有障碍物且距离 < 阈值，自动减速或停止
+        
+        参数:
+            vx: 前后速度 [m/s]
+            vy: 左右速度 [m/s]
+            omega: 旋转角速度 [rad/s]
+            lidar_processor: LidarProcessor 实例
+        """
+        if lidar_processor and lidar_processor.enabled:
+            min_dist = lidar_processor.get_min_distance_in_angle_range(angle_range_deg=30)
+            
+            if min_dist < 0.20:  # 20cm 内有障碍物 → 紧急停止
+                self.stop()
+                print(f"  ⚠️ Lidar 检测到障碍物 ({min_dist:.2f}m)，紧急停止")
+                return
+            elif min_dist < 0.35:  # 35cm 内有障碍物 → 减速
+                vx *= 0.3
+                vy *= 0.3
+                omega *= 0.3
+        
+        self.move(vx, vy, omega)
