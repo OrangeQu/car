@@ -733,9 +733,10 @@ class ArmController:
         
         # 步骤2: 保持 arm2/arm3 不变，逐步弯曲 arm4 降低夹爪
         # 目标高度 = 桌面高度 + 木块半高 + 安全余量
-        # 木块约 5cm 高，夹爪夹在木块中间，木块底部在夹爪中心下方 2.5cm
-        # 需要确保木块底部 ≥ 桌面高度，即夹爪中心 ≥ 桌面高度 + 2.5cm
-        # 再加 1.5cm 安全余量应对 arm2/arm3 偏移
+        # 木块是 0.1m 立方体，夹爪夹在木块前面（不是中间）
+        # 木块重心在夹爪前方约 0.05m 处
+        # 需要确保木块底部 ≥ 桌面高度，即夹爪中心 ≥ 桌面高度 + 0.05m
+        # 再加 0.02m 安全余量应对 arm2/arm3 偏移
         print(f"  🦾 步骤2: 保持 arm2/arm3 不变，逐步弯曲 arm4 降低夹爪")
         
         arm4_start = 0.0
@@ -743,9 +744,8 @@ class ArmController:
         arm4_step = -0.03
         
         current_arm4 = arm4_start
-        # 目标高度：桌面高度 + 木块半高(0.025) + 安全余量(0.015) = 0.390m
-        # 这样即使 arm2/arm3 有偏移，木块底部也能在桌面之上
-        target_height = TABLE_SURFACE_Z + 0.040  # 0.350 + 0.040 = 0.390m
+        # 目标高度：桌面高度(0.6975) + 木块半高(0.05) + 安全余量(0.02) = 0.7675m
+        target_height = TABLE_SURFACE_Z + 0.070  # 0.6975 + 0.070 = 0.7675m
         reached_target = False
         
         while current_arm4 >= arm4_min and not reached_target:

@@ -29,11 +29,12 @@ GRIPPER_MAX = 0.06      # 张开位置 [m]（原为0.025，改为0.06以夹住10
 GRIPPER_SPEED = 0.05    # 夹爪速度 [m/s]
 
 # ==================== 桌面参数 ====================
-# 桌子 Solid translation: 0 0 0.325
-# 桌面 Box size: 1.2 0.8 0.05 -> 表面在 0.325 + 0.05/2 = 0.350m
-TABLE_HEIGHT = 0.350      # 桌面表面高度 [m]（可微调）
+# 桌子 Solid translation: 0 0 0.6725
+# 桌面 Box size: 1.2 0.8 0.05 -> 表面在 0.6725 + 0.05/2 = 0.6975m
+# 桌腿 Cylinder height: 0.7, 桌腿底部在 0.6725 - 0.325 - 0.7/2 = 0.0（地面）
+TABLE_HEIGHT = 0.6975     # 桌面表面高度 [m]
 TABLE_CENTER = (0.0, 0.0) # 桌子中心位置 (x, y)
-TABLE_SURFACE_Z = 0.350   # 桌面表面 Z 坐标 [m]（木块放置目标高度）
+TABLE_SURFACE_Z = 0.6975  # 桌面表面 Z 坐标 [m]（木块放置目标高度）
 
 # 放置参数
 PLACEMENT = {
